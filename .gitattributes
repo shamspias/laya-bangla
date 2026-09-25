@@ -1,0 +1,17 @@
+# Normalize text files across platforms while leaving binary files untouched.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.zip binary
+*.gz binary

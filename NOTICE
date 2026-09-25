@@ -1,0 +1,15 @@
+laya-bangla
+Copyright 2026 laya-bangla contributors
+
+This project plans a Bangla-focused adaptation of Laya by Convai Innovations.
+
+Upstream source: https://github.com/NandhaKishorM/laya
+Upstream model family: https://huggingface.co/convaiinnovations/laya
+Planned base checkpoint: https://huggingface.co/convaiinnovations/laya-multilingual
+
+The upstream source and model cards declare the Apache License, Version 2.0.
+This repository currently contains project documentation and configuration;
+upstream model weights are not bundled with it.
+
+laya-bangla is an independent project. References to upstream names identify
+the origin of the work and do not imply endorsement.
