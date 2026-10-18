@@ -1,0 +1,37 @@
+# LoRA variant of configs/train.toml: the encoder is frozen and low-rank adapters are
+# trained on its attention and MLP projections, together with the full decision head.
+# The adapters are merged into the encoder afterwards, so the output is an ordinary Laya
+# checkpoint. Fewer changed weights may keep more of the base model's general and English
+# ability; docs/benchmark-results.md compares the two runs. Settings were fixed before
+# the run, with the same seed, data, and selection rule (lowest validation NLL) as v2.
+baseline = "baseline.toml"
+train = "../data/processed/train.jsonl"
+validation = "../data/processed/validation.jsonl"
+seed = 20261018
+freeze_embeddings = true
+
+[lora]
+r = 16
+alpha = 32
+dropout = 0.05
+target_modules = ["Wqkv", "Wi", "Wo"]
+
+[trainer]
+# Adapters start at zero and need a larger learning rate and one more epoch than full
+# fine-tuning; best-epoch selection on validation NLL guards against overfitting.
+epochs = 3
+# Same effective batch (64) as v2 in smaller steps, so the run fits beside other GPU jobs.
+micro_batch = 16
+grad_accum = 4
+encoder_lr = 2e-4
+head_lr = 1e-4
+min_lr = 1e-6
+weight_decay = 0.01
+loss = "soft-ce"
+shuffle_options = ["choice"]
+label_smoothing = 0.05
+max_len = 512
+head_max_len = 256
+amp = true
+gradient_checkpointing = true
+log_every = 200

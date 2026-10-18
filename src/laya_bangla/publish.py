@@ -48,15 +48,15 @@ def stage_model(
     return sorted(copies)
 
 
-def verify_upload(api, repo_id: str, revision: str, staging: Path, files: list[str]) -> None:
-    """Every staged file exists at `revision`, and every LFS file has the local SHA-256."""
+def verify_upload(api, repo_id: str, revision: str, files: dict[str, Path]) -> None:
+    """Every repository path exists at `revision`, and every LFS file has the local SHA-256."""
     info = api.model_info(repo_id, revision=revision, files_metadata=True)
     remote = {item.rfilename: item for item in info.siblings}
-    for name in files:
+    for name, local in files.items():
         if name not in remote:
             raise RuntimeError(f"{name} is missing from {repo_id}@{revision}")
         lfs = remote[name].lfs
-        if lfs is not None and lfs.sha256 != sha256_file(staging / name):
+        if lfs is not None and lfs.sha256 != sha256_file(local):
             raise RuntimeError(f"{name} on the Hub does not match the local file")
 
 
@@ -83,26 +83,64 @@ def publish_model(
         staging = Path(tmp)
         files = stage_model(model, card, benchmarks, notices, staging)
         commit = api.upload_folder(repo_id=repo_id, folder_path=staging, commit_message=message)
-        verify_upload(api, repo_id, commit.oid, staging, files)
+        verify_upload(api, repo_id, commit.oid, {name: staging / name for name in files})
     if tag:
         api.create_tag(repo_id, tag=tag, revision=commit.oid)
     return commit.oid
 
 
-def publish_space(space: Path, repo_id: str, message: str, api=None) -> str:
-    """Upload the Gradio playground and return the Space commit SHA."""
-    if not (space / "app.py").is_file() or not (space / "README.md").is_file():
-        raise FileNotFoundError(f"{space} needs app.py and README.md")
+def publish_onnx(onnx_dir: Path, repo_id: str, message: str, api=None) -> str:
+    """Add exported ONNX variants under `onnx/` in an existing model repository.
+
+    Each subfolder of `onnx_dir` (fp32/, int8/) must hold the layout laya-ts loads.
+    """
+    variants = sorted(path for path in onnx_dir.iterdir() if path.is_dir())
+    if not variants:
+        raise FileNotFoundError(f"{onnx_dir} has no ONNX variant folders")
+    files = {}
+    for variant in variants:
+        for name in ("encoder.onnx", "head.onnx", "rl_agent_config.json", "tokenizer.json"):
+            if not (variant / name).is_file():
+                raise FileNotFoundError(f"{variant} is missing {name}")
+        for path in sorted(variant.iterdir()):
+            files[f"onnx/{variant.name}/{path.name}"] = path
     if api is None:
         from huggingface_hub import HfApi
 
         api = HfApi()
-    api.create_repo(repo_id, repo_type="space", space_sdk="gradio", exist_ok=True)
+    commit = api.upload_folder(
+        repo_id=repo_id, folder_path=onnx_dir, path_in_repo="onnx", commit_message=message
+    )
+    verify_upload(api, repo_id, commit.oid, files)
+    return commit.oid
+
+
+def space_sdk(readme: Path) -> str:
+    """The `sdk:` value from a Space README's front matter."""
+    text = readme.read_text(encoding="utf-8")
+    front = text.split("\n---", 1)[0]
+    match = re.search(r"^sdk:\s*(\S+)\s*$", front, re.M)
+    if not text.startswith("---") or not match:
+        raise ValueError(f"{readme} needs front matter with an sdk")
+    return match.group(1)
+
+
+def publish_space(space: Path, repo_id: str, message: str, api=None) -> str:
+    """Upload a Gradio or static playground and return the Space commit SHA."""
+    sdk = space_sdk(space / "README.md")
+    entry = {"gradio": "app.py", "static": "index.html"}.get(sdk)
+    if entry is None or not (space / entry).is_file():
+        raise FileNotFoundError(f"{space} is a {sdk} Space but has no {entry}")
+    if api is None:
+        from huggingface_hub import HfApi
+
+        api = HfApi()
+    api.create_repo(repo_id, repo_type="space", space_sdk=sdk, exist_ok=True)
     commit = api.upload_folder(
         repo_id=repo_id,
         repo_type="space",
         folder_path=space,
         commit_message=message,
-        ignore_patterns=["__pycache__/**", "*.pyc"],
+        ignore_patterns=["__pycache__/**", "*.pyc", "tools/**", ".*/**"],
     )
     return commit.oid

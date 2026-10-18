@@ -31,6 +31,8 @@ LEVELS = {"low": 0, "medium": 1, "high": 2}
 SENTIMENT = {"negative": 0, "neutral": 1, "positive": 2}
 # SentNoB: 0 neutral, 1 positive, 2 negative (dataset card).
 SENTNOB = {0: 1, 1: 2, 2: 0}
+# TweetEval sentiment: 0 negative, 1 neutral, 2 positive (dataset card).
+TWEETEVAL_SENTIMENT = {0: 0, 1: 1, 2: 2}
 
 
 def normalize_text(text: str) -> str:
@@ -253,6 +255,39 @@ def load_indicsentiment(paths, seed, fractions):
         yield record("indicsentiment", "test", index, index, row["INDIC REVIEW"], labels)
 
 
+def load_indicsentiment_en(paths, seed, fractions):
+    """The English originals of the IndicSentiment reviews: a parallel English test."""
+    for index, row in enumerate(read_json_lines(paths["test"])):
+        label = (row.get("LABEL") or "").strip().lower()
+        if label not in ("positive", "negative") or not (row.get("ENGLISH REVIEW") or "").strip():
+            continue
+        labels = {"sentiment": SENTIMENT[label]}
+        yield record("indicsentiment_en", "test", index, index, row["ENGLISH REVIEW"], labels)
+
+
+def load_xnli_en(paths, seed, fractions):
+    """English XNLI, the source IndicXNLI was translated from, as entailed/contradicted pairs."""
+    for index, row in enumerate(read_parquet(paths["test"])):
+        if row["label"] == 1:
+            continue  # IndicXNLI's pair classification drops neutral pairs too.
+        state = f"Sentence 1: {row['premise']}\nSentence 2: {row['hypothesis']}"
+        labels = {"entailment": row["label"] == 0}
+        yield record("xnli_en", "test", index, leak_key(row["premise"]), state, labels)
+
+
+def load_tweeteval_hate(paths, seed, fractions):
+    for index, row in enumerate(read_parquet(paths["test"])):
+        yield record(
+            "tweeteval_hate", "test", index, index, row["text"], {"hate": row["label"] == 1}
+        )
+
+
+def load_tweeteval_sentiment(paths, seed, fractions):
+    for index, row in enumerate(read_parquet(paths["test"])):
+        labels = {"sentiment": TWEETEVAL_SENTIMENT[row["label"]]}
+        yield record("tweeteval_sentiment", "test", index, index, row["text"], labels)
+
+
 def load_indicxnli(paths, seed, fractions):
     for index, row in enumerate(read_parquet(paths["test"])):
         state = f"বাক্য ১: {row['sentence1']}\nবাক্য ২: {row['sentence2']}"
@@ -271,7 +306,20 @@ LOADERS = {
     "sentnob": load_sentnob,
     "indicsentiment": load_indicsentiment,
     "indicxnli": load_indicxnli,
+    "indicsentiment_en": load_indicsentiment_en,
+    "xnli_en": load_xnli_en,
+    "tweeteval_hate": load_tweeteval_hate,
+    "tweeteval_sentiment": load_tweeteval_sentiment,
 }
+
+
+def renamed(item: dict, old: str, new: str) -> dict:
+    return dict(
+        item,
+        source=new,
+        id=new + item["id"].removeprefix(old),
+        group=new + item["group"].removeprefix(old),
+    )
 
 
 def load_config(path: Path) -> dict:
@@ -284,7 +332,8 @@ def load_config(path: Path) -> dict:
         raise ValueError(
             "hash_split must assign train, validation, and test fractions summing to 1"
         )
-    unknown = set(config["sources"]) - set(LOADERS)
+    unknown = {source.get("loader", name) for name, source in config["sources"].items()}
+    unknown -= set(LOADERS)
     if unknown:
         raise ValueError(f"No loader for sources: {sorted(unknown)}")
     return config
@@ -419,16 +468,32 @@ def prepare(config_path: Path) -> dict:
         paths = {
             split: fetch(source, filename, config["cache"]) for split, filename in files.items()
         }
-        loaded = list(LOADERS[name](paths, config["seed"], config["hash_split"]))
+        loader = source.get("loader", name)
+        loaded = list(LOADERS[loader](paths, config["seed"], config["hash_split"]))
+        if loader != name:  # One loader can read another language of the same dataset.
+            loaded = [renamed(item, loader, name) for item in loaded]
         if source["use"] == "benchmark":
             loaded = [dict(item, split="test") for item in loaded]
+        if "slice" in source:  # e.g. English text, which the script heuristic calls Banglish
+            loaded = [dict(item, slice=source["slice"]) for item in loaded]
         records.extend(loaded)
         source_tasks[name] = source["tasks"]
         caps[(name, "train")] = source.get("max_train_rows", config["max_train_rows_per_task"])
         caps[(name, "validation")] = config["max_validation_rows_per_task"]
+        caps[(name, "test")] = source.get("max_test_rows")
         provenance[name] = {
             key: source[key]
-            for key in ("repo", "revision", "url", "doi", "sha256", "license", "use", "tasks")
+            for key in (
+                "repo",
+                "revision",
+                "url",
+                "doi",
+                "sha256",
+                "license",
+                "use",
+                "tasks",
+                "loader",
+            )
             if key in source
         }
         provenance[name]["files_sha256"] = {

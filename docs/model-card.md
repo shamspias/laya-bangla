@@ -188,8 +188,124 @@ print(result["answers"]["abusive"]["noul"])          # 0.31: probability of "yes
 For many texts at once, use `agent.predict_batch(texts, questions, batch_size=32)`. The model
 runs on CPU, an NVIDIA GPU, or Apple Silicon (MPS) and needs about 1.3 GB of memory.
 
-**No code?** Open the [playground Space](https://huggingface.co/spaces/algolyzer/laya-bangla-playground),
-type a message, and see this model's answers next to the base model's as you type.
+**No code?** Open the [playground Space](https://huggingface.co/spaces/algolyzer/laya-bangla-playground).
+The model runs **inside your browser** (WebGPU or WASM), so nothing you type is sent anywhere.
+The first visit downloads about 640 MB, which the browser then caches.
+
+## Choose a version
+
+| Version | Best for | Size | Where to get it |
+| --- | --- | ---: | --- |
+| **laya-bangla v2** (recommended) | Python, servers; fully benchmarked | 644 MB | this repository, `revision="v2"` |
+| v2 · ONNX fp32 | Node.js, servers without PyTorch | 1.3 GB | this repository, `onnx/fp32/` |
+| v2 · ONNX int8 | Web browsers (WebGPU or WASM) | 640 MB | this repository, `onnx/int8/` |
+| **laya-bangla-lora** | Also asking new yes/no questions: keeps more of the base model's reasoning (sample-tested) | 644 MB | [`algolyzer/laya-bangla-lora`](https://huggingface.co/algolyzer/laya-bangla-lora) |
+| LoRA · ONNX fp32 / int8 | The same, in Node.js or browsers | 1.3 GB / 640 MB | `algolyzer/laya-bangla-lora`, `onnx/` |
+| laya-bangla-llm (GGUF, safetensors) | Ollama, llama.cpp, LM Studio, vLLM | | Not trained yet ([why](#ollama-llamacpp-lm-studio-vllm)) |
+
+All versions answer the same questions in the same format, and every ONNX file was checked
+against PyTorch: the same answer for 99.6% (`fp32`) and 99.1% (`int8`) of 1,284 test
+decisions, with the same accuracy. The [collection](https://huggingface.co/collections/algolyzer/laya-bangla-6ad51a88c6ea46c7f5cf9180)
+lists every version, the demo, and the datasets.
+
+## Run it on any platform
+
+### Python
+
+The [quick start](#quick-start) above: `pip install "laya==0.4.11"`, then
+`laya.load("algolyzer/laya-bangla", revision="v2")`. CPU, NVIDIA GPU (CUDA), and Apple
+Silicon (MPS) all work. Use `revision="v2"` so an update never changes your results.
+
+### HTTP API (JavaScript, PHP, Java, Go, anything that can send a request)
+
+Laya ships a production server. Register laya-bangla and start it:
+
+```bash
+pip install "laya[serve]==0.4.11"
+LAYA_EXTRA_MODELS='{"bangla": "algolyzer/laya-bangla"}' LAYA_MODELS=bangla LAYA_DEFAULT_MODEL=bangla LAYA_REVISION=v2 LAYA_PORT=8000 laya-serve
+```
+
+```bash
+curl -s http://localhost:8000/v1/systemone -H "Content-Type: application/json" -d '{
+  "model": "bangla",
+  "state": "আমাদের এলাকায় তিন দিন ধরে পানি নেই",
+  "questions": {"sector": {"type": "choice", "instructions": "কোন সেবা খাতের সমস্যা?",
+    "criteria": {"water": "পানি", "electricity": "বিদ্যুৎ", "waste": "ময়লা"}}}
+}'
+```
+
+The reply holds the same `answers` as the Python API. `/v1/systemone/batch` answers many texts
+at once, `/health` shows the loaded revision, and `LAYA_API_KEY=<secret>` requires
+`Authorization: Bearer <secret>`.
+
+### Docker
+
+The same server in a container (this Dockerfile is a starting point; it was not built in
+this project):
+
+```dockerfile
+FROM python:3.12-slim
+RUN pip install --no-cache-dir "laya[serve]==0.4.11" --extra-index-url https://download.pytorch.org/whl/cpu
+ENV LAYA_EXTRA_MODELS='{"bangla": "algolyzer/laya-bangla"}' LAYA_MODELS=bangla
+ENV LAYA_DEFAULT_MODEL=bangla LAYA_REVISION=v2 LAYA_PORT=8000
+EXPOSE 8000
+CMD ["laya-serve"]
+```
+
+### Web browser, no server
+
+The [playground](https://huggingface.co/spaces/algolyzer/laya-bangla-playground) runs entirely in
+the browser with [laya-ts](https://github.com/NandhaKishorM/laya/tree/main/laya-ts), Laya's
+TypeScript runtime, and ONNX Runtime Web. Copy its [`web/`](https://github.com/shamspias/laya-bangla/tree/main/web)
+folder to any static host (GitHub Pages, Netlify, a Hugging Face static Space) and it loads the
+model from this repository:
+
+```js
+import { Agent } from "./vendor/laya-ts/index.js"; // plus an import map for onnxruntime-web
+const agent = await Agent.load("algolyzer/laya-bangla", { subfolder: "onnx/int8", revision: "7c8ad162a66c05409f9278e047e3ee80c24017a8" });
+const result = await agent.predict("আমাদের এলাকায় তিন দিন ধরে পানি নেই", questions);
+```
+
+### Node.js
+
+The same laya-ts code with `onnxruntime-node`, on the `onnx/fp32` or `onnx/int8` folder:
+
+```bash
+hf download algolyzer/laya-bangla --include "onnx/fp32/*" --local-dir laya-bangla
+```
+
+```js
+const agent = await Agent.load("./laya-bangla/onnx/fp32", { device: "cpu" });
+```
+
+### Go, Rust, Java, .NET
+
+Laya has ONNX Runtime ports for [Go](https://github.com/NandhaKishorM/laya/tree/main/laya-go),
+[Rust](https://github.com/NandhaKishorM/laya/tree/main/laya-rust),
+[Java](https://github.com/NandhaKishorM/laya/tree/main/laya-java), and
+[.NET](https://github.com/NandhaKishorM/laya/tree/main/laya-dotnet). Point them at the `onnx/`
+files (each port's README says which layout it reads). These ports were not tested with
+laya-bangla.
+
+### Ollama, llama.cpp, LM Studio, vLLM
+
+These tools run chat language models. laya-bangla is not one: it is a text encoder with Laya's
+decision head, which these tools cannot load, so a GGUF conversion would lose the part that
+makes the decisions. Until the LLM version exists, use the **HTTP API** above from those apps.
+
+A separate LLM version, **laya-bangla-llm** (Qwen3-1.7B fine-tuned with QLoRA to answer the same
+questions as JSON), is fully prepared but not trained yet. Its training, benchmark, GGUF
+export, and Ollama files are in the [GitHub repository](https://github.com/shamspias/laya-bangla/blob/main/docs/next-steps.md).
+When it is published, it will run with:
+
+```bash
+ollama run hf.co/algolyzer/laya-bangla-llm-GGUF:Q4_K_M     # Ollama
+llama-server -hf algolyzer/laya-bangla-llm-GGUF:Q4_K_M     # llama.cpp
+vllm serve algolyzer/laya-bangla-llm                       # vLLM
+```
+
+Step-by-step versions of every option are in the
+[deployment guide](https://github.com/shamspias/laya-bangla/blob/main/docs/deploy.md).
 
 ## Writing questions
 
@@ -203,6 +319,29 @@ type a message, and see this model's answers next to the base model's as you typ
 - `noul` questions use exactly two options, `"false"` and `"true"`. `score` options are a list
   from lowest to highest.
 - Keep option descriptions short and clearly different from each other.
+
+## Where it works best
+
+Accuracy of laya-bangla on held-out test data, averaged over Bangla- and English-worded
+questions (base model in brackets). "Not tested" means no public test data exists.
+
+| Task | Bangla script | Banglish | English |
+| --- | --- | --- | --- |
+| Complaint service sector | **93%** (61%) | not tested | not tested |
+| Voice-assistant routing, two steps | **81%** (18%) | often wrong (not trained on Banglish) | **77%** (40%) |
+| Topic of a sentence | **77%** (57%) | not tested | **87%** (79%) |
+| Hate speech | **74%** (58%) | **77%** (58%) | 63% (57%) |
+| Personal attack | not tested | **81%** (57%) | not tested |
+| Sentiment of course comments | **82%** (46%) | **83%** (36%) | not tested |
+| Sentiment of reviews and posts | 49–63% (24–34%) | not tested | 65–74% (33–54%) |
+| Yes/no sentence logic (entailment) | 51%, **worse** (64%) | not tested | 64%, **worse** (80%) |
+
+- **Works well (75% and up):** routing requests and complaints, topics, Banglish moderation,
+  course-feedback sentiment, in Bangla script and also in English.
+- **Use with care (60–75%):** hate speech in Bangla script or English tweets, sentiment outside
+  course comments. Check a sample first.
+- **Do not use for:** general yes/no reasoning (use the base model), and Banglish voice
+  commands.
 
 ## How well it works
 
@@ -249,16 +388,33 @@ datasets.
 - **Speed.** About 4 ms per decision in batches on an RTX 4060; 0.1 to 0.7 seconds per
   message on 2 CPU threads.
 
+### English text
+
+The model was trained only on Bangla and Banglish, yet it also got better on English text. On six
+English test sets (13,476 items; four are the English originals of the Bangla tests above), pooled
+accuracy rises from 61% to 73%, run on CPU:
+
+| Task | Dataset | Test size | Base model | laya-bangla |
+| --- | --- | ---: | :---: | :---: |
+| Voice-assistant routing, two steps | MASSIVE `en` | 2,970 | 31% / 49% | **75% / 79%** |
+| Voice-assistant scenario (18 options) | MASSIVE `en` | 2,970 | 45% / 64% | **82% / 85%** |
+| Topic of a sentence (7) | SIB-200 `eng_Latn` | 204 | 77% / 81% | **86% / 88%** |
+| Sentiment of product reviews | IndicSentiment, English originals | 996 | 9% / 58% | **74% / 74%** |
+| Sentiment of tweets | TweetEval | 3,000 | 52% / 55% | **65% / 65%** |
+| Hate speech in tweets | TweetEval | 2,966 | 53% / 61% | **63% / 62%** |
+| Does sentence A imply B? (yes/no) | XNLI `en` | 3,340 | **72% / 88%** | 51% / 76% |
+
 Macro-F1, calibration error, ordinal error, and results split by script (Bangla, Banglish,
 mixed) are in the [full benchmark report](https://github.com/shamspias/laya-bangla/blob/main/docs/benchmark-results.md).
-The metrics-only summaries are in this repository under `benchmark/`.
+The metrics-only summaries are in this repository under `benchmark/` (English: `benchmark/english/`).
 
 ## Limitations
 
 - **New kinds of yes/no questions can get worse.** All trained yes/no tasks are about
   moderation, so the model learned to answer "no" readily. On sentence entailment (IndicXNLI),
   which it never trained on, it falls below the base model to about chance. Check a sample of
-  answers before relying on a new `noul` question, or compare with the base model.
+  answers before relying on a new `noul` question, or compare with the base model. The same
+  drop shows on English XNLI (80% to 64% averaged over both question languages).
 - **Rare cases are under-detected.** Only about 8% of BanTH comments are abusive. Accuracy looks
   high (83–92%), but the model finds few of them: macro-F1 is only 0.51–0.59.
 - **Complaint severity is weak** (40–43% over three levels). The source labels themselves may be
@@ -355,6 +511,8 @@ GPU training is not bit-for-bit deterministic, so a rerun can differ slightly.
 | `tasks.json` | Every question used in training and testing, in Bangla and English |
 | `train_report.json` | Data and config checksums, validation history, calibration report |
 | `benchmark/base/summary.json`, `benchmark/laya-bangla-v2/summary.json` | Metrics-only test results for both models |
+| `benchmark/english/base/summary.json`, `benchmark/english/laya-bangla-v2/summary.json` | The same for the English test sets |
+| `onnx/fp32/`, `onnx/int8/` | ONNX exports for laya-ts (Node.js and browsers), checked against PyTorch |
 | `LICENSE`, `NOTICE` | Apache 2.0 license and attribution |
 
 ## License and credits

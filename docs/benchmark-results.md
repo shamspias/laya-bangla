@@ -99,6 +99,66 @@ Accuracy pooled over the six training sources' test splits:
 
 Mixed-script results rest on 123 decisions and are imprecise.
 
+## English text
+
+laya-bangla was trained only on Bangla and Banglish. To see what fine-tuning did to its
+English, both checkpoints were scored on six English test sets built by
+`configs/data-english.toml` ([datasets](datasets.md#english-benchmark)): 13,476 items, each
+asked with the Bangla and the English test wording. These runs used the CPU
+(`--device cpu`, test file SHA-256 `6249bd3c…`), so their decimals are not directly comparable
+with the GPU runs above.
+
+| Benchmark | Wording | n | Base acc | v2 acc | Δ acc | Base macro-F1 | v2 macro-F1 | Base ECE | v2 ECE |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| indicsentiment_en/sentiment | bn | 996 | 0.089 | 0.737 | +0.648 | 0.108 | 0.558 | 0.597 | 0.076 |
+| indicsentiment_en/sentiment | en | 996 | 0.576 | 0.743 | +0.167 | 0.449 | 0.559 | 0.219 | 0.071 |
+| massive/intent (end-to-end) | bn | 2970 | 0.313 | 0.752 | +0.438 | — | — | — | — |
+| massive/intent (end-to-end) | en | 2970 | 0.485 | 0.787 | +0.301 | — | — | — | — |
+| massive_en/massive_intent | bn | 2690 | 0.636 | 0.894 | +0.258 | 0.562 | 0.817 | 0.162 | 0.015 |
+| massive_en/massive_intent | en | 2690 | 0.717 | 0.907 | +0.190 | 0.643 | 0.839 | 0.077 | 0.014 |
+| massive_en/massive_scenario | bn | 2970 | 0.452 | 0.824 | +0.372 | 0.464 | 0.811 | 0.294 | 0.032 |
+| massive_en/massive_scenario | en | 2970 | 0.639 | 0.847 | +0.208 | 0.638 | 0.843 | 0.111 | 0.024 |
+| sib200_en/sib_topic | bn | 204 | 0.770 | 0.858 | +0.088 | 0.741 | 0.845 | 0.140 | 0.014 |
+| sib200_en/sib_topic | en | 204 | 0.809 | 0.877 | +0.069 | 0.779 | 0.871 | 0.106 | 0.037 |
+| tweeteval_hate/hate | bn | 2966 | 0.528 | 0.629 | +0.102 | 0.507 | 0.622 | 0.285 | 0.102 |
+| tweeteval_hate/hate | en | 2966 | 0.605 | 0.624 | +0.019 | 0.605 | 0.624 | 0.175 | 0.160 |
+| tweeteval_sentiment/sentiment | bn | 3000 | 0.524 | 0.646 | +0.122 | 0.345 | 0.609 | 0.144 | 0.093 |
+| tweeteval_sentiment/sentiment | en | 3000 | 0.554 | 0.648 | +0.094 | 0.508 | 0.608 | 0.151 | 0.134 |
+| xnli_en/entailment | bn | 3340 | 0.725 | 0.510 | −0.215 | 0.723 | 0.363 | 0.122 | 0.283 |
+| xnli_en/entailment | en | 3340 | 0.880 | 0.764 | −0.115 | 0.879 | 0.751 | 0.033 | 0.050 |
+
+- **English improved, not just Bangla.** Pooled over all English decisions, accuracy rises
+  from 61.3% to 72.7% (56.4% to 75.0% without XNLI). Routing (MASSIVE end-to-end 31–49% to
+  75–79%) and sentiment (IndicSentiment English 9–58% to 74%) gain most, and calibration
+  improves on every task except entailment.
+- **The yes/no regression is not about language.** XNLI entailment drops from 0.725/0.880 to
+  0.510/0.764, mirroring IndicXNLI in Bangla: the moderation-only `noul` training makes the
+  model answer "no" readily for any new yes/no question.
+- **English hate speech gains little** (0.53/0.61 to 0.63/0.62). The trained hate data is
+  South Asian YouTube comments, not English tweets.
+
+## LoRA version (sample)
+
+[laya-bangla-lora](https://huggingface.co/algolyzer/laya-bangla-lora) was trained on the same data
+with `configs/train-lora.toml` (18.3M trainable parameters instead of 125M). Its full benchmark is
+pending ([next steps](next-steps.md)); this sample scores base, v2, and LoRA on the same CPU with
+`--limit 100`, the first 100 test items of each source and wording. Accuracy averaged over both
+question languages:
+
+| Pooled over… | Decisions | Base | v2 | LoRA |
+| --- | ---: | ---: | ---: | ---: |
+| Bangla, trained sources | 1,956 | 48.3% | 80.3% | **81.0%** |
+| Bangla, benchmark-only sources | 600 | 41.2% | 54.5% | **55.0%** |
+| English, all six sources | 1,356 | 63.3% | 74.3% | **76.5%** |
+| IndicXNLI entailment (Bangla) | 200 | **70.0%** | 53.0% | 63.5% |
+| XNLI entailment (English) | 200 | **82.0%** | 65.0% | 81.0% |
+
+LoRA matches v2 on the trained tasks and keeps most of the base model's yes/no reasoning, which
+v2 loses (limitation 1). On validation it is slightly behind (NLL 0.460 vs 0.447), so v2 remains
+the main release by the rule fixed before testing; LoRA is published as the alternative for
+users who also ask new yes/no questions. With 100 items per source, differences of a few points
+are noise.
+
 ## Limitations
 
 1. **New yes/no questions degrade.** Every trained `noul` task is a
@@ -117,7 +177,8 @@ Mixed-script results rest on 123 decisions and are imprecise.
    from eLearning comments; SentNoB and IndicSentiment reach 0.48–0.66.
 5. **No real customer-support data exists** for the department/churn/urgency
    workflow. Its smoke-set gains for department and urgency are indirect.
-6. **One seed, no confidence intervals.** Differences of a few points on small
+6. **The same yes/no drop appears in English** (XNLI, see [English text](#english-text)).
+7. **One seed, no confidence intervals.** Differences of a few points on small
    rows (SIB-200, smoke set, mixed script) are within noise.
 
 ## Earlier run (v1) and model selection

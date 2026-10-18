@@ -6,8 +6,10 @@
 
 [**Model on Hugging Face**](https://huggingface.co/algolyzer/laya-bangla) ·
 [**Live demo**](https://huggingface.co/spaces/algolyzer/laya-bangla-playground) ·
-[Benchmark results](docs/benchmark-results.md) · [Datasets](docs/datasets.md) ·
-[Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md) · [Apache 2.0 license](LICENSE)
+[All versions](https://huggingface.co/collections/algolyzer/laya-bangla-6ad51a88c6ea46c7f5cf9180) ·
+[Run it anywhere](docs/deploy.md) · [Benchmark results](docs/benchmark-results.md) ·
+[Datasets](docs/datasets.md) · [Fine-tuning guide](docs/fine-tuning.md) ·
+[Next steps](docs/next-steps.md) · [Contributing](CONTRIBUTING.md) · [Apache 2.0 license](LICENSE)
 
 ## What is this?
 
@@ -69,10 +71,27 @@ what the model is good and bad at, and every dataset it learned from.
 
 ### Try it without code
 
-The [live demo](https://huggingface.co/spaces/algolyzer/laya-bangla-playground) answers as you
-type and shows the base model next to laya-bangla. It has ready-made tasks (citizen complaints,
-voice-assistant routing, moderation, sentiment, topic, support routing), a box for your own
-questions, and the benchmark results. Its source is in [`space/`](space/).
+The [live demo](https://huggingface.co/spaces/algolyzer/laya-bangla-playground) runs the model
+**inside your browser**, so nothing you type leaves the page and the demo costs nothing to host.
+It answers as you type, has ready-made tasks (citizen complaints, voice-assistant routing,
+moderation, sentiment, topic, support routing), a box for your own questions, and the benchmark
+results. The first visit downloads about 640 MB once. Its source is in [`web/`](web/).
+
+### Other ways to run it
+
+| Where | How | Guide |
+| --- | --- | --- |
+| Python | `laya.load("algolyzer/laya-bangla", revision="v2")` | above |
+| HTTP API, any language | Laya's `laya-serve` server | [deploy §2](docs/deploy.md#2-http-api-any-language) |
+| Your own web page, no server | ONNX files + laya-ts | [deploy §3](docs/deploy.md#3-in-the-browser) |
+| Node.js | ONNX files + laya-ts | [deploy §4](docs/deploy.md#4-nodejs) |
+| Ollama, llama.cpp, vLLM | LLM version, code ready but not trained yet | [deploy §7](docs/deploy.md#7-the-llm-version-ollama-llamacpp-vllm) |
+
+**Versions:** [`algolyzer/laya-bangla`](https://huggingface.co/algolyzer/laya-bangla) (v2, the main
+release) and [`algolyzer/laya-bangla-lora`](https://huggingface.co/algolyzer/laya-bangla-lora) (a
+lighter LoRA fine-tune that keeps more yes/no reasoning), each as PyTorch, ONNX fp32, and ONNX
+int8. The [model card](https://huggingface.co/algolyzer/laya-bangla#choose-a-version) helps you
+choose.
 
 ## Results
 
@@ -90,8 +109,26 @@ Each cell is *Bangla-worded question / English-worded question*:
 
 Over all test decisions of the six training datasets, accuracy rises from **53% to 82%**, and
 calibration error falls from 0.27 to 0.04, so its probabilities can be trusted on these tasks.
-New kinds of yes/no questions can get worse, as the IndicXNLI row shows. See the
-[benchmark report](docs/benchmark-results.md) for every task, script, and limitation.
+New kinds of yes/no questions can get worse, as the IndicXNLI row shows.
+
+### Where it works best
+
+Accuracy averaged over Bangla- and English-worded questions (base model in brackets):
+
+| Task | Bangla script | Banglish | English |
+| --- | --- | --- | --- |
+| Complaint service sector | **93%** (61%) | not tested | not tested |
+| Voice-assistant routing | **81%** (18%) | often wrong, not trained | **77%** (40%) |
+| Topic of a sentence | **77%** (57%) | not tested | **87%** (79%) |
+| Hate speech | **74%** (58%) | **77%** (58%) | 63% (57%) |
+| Sentiment of course comments | **82%** (46%) | **83%** (36%) | not tested |
+| Sentiment of reviews and posts | 49–63% (24–34%) | not tested | 65–74% (33–54%) |
+| Yes/no sentence logic | 51%, worse (64%) | not tested | 64%, worse (80%) |
+
+Although it was trained only on Bangla, it also improved on English text: 61% to 73% pooled over
+six English test sets. Use it for routing, topics, moderation, and feedback; keep the base model
+for general yes/no reasoning. See the [benchmark report](docs/benchmark-results.md) for every
+task, script, and limitation.
 
 ## Datasets
 
@@ -161,8 +198,18 @@ uv run --frozen laya-bangla benchmark --model models/laya-bangla-v2 --output out
 uv run --frozen laya-bangla compare outputs/bench-base/summary.json outputs/bench-mine/summary.json
 ```
 
-Add `--limit 50` for a quick check on 50 rows per dataset. For the 36-message diagnostic smoke
-run on the base model, see [local development](docs/local-development.md).
+Add `--limit 50` for a quick check on 50 rows per dataset. For English, build the English test
+set once with `laya-bangla prepare --config configs/data-english.toml` and pass
+`--data data/processed-english/test.jsonl`. For the 36-message diagnostic smoke run on the base
+model, see [local development](docs/local-development.md).
+
+To test the browser and Node version, export ONNX files and score them against the PyTorch run:
+
+```bash
+uv run --frozen laya-bangla export-onnx --model models/laya-bangla-v2 --output models/laya-bangla-v2-onnx
+node web/tools/predict.mjs <laya-ts>/dist/index.js models/laya-bangla-v2-onnx/int8 rows.jsonl out.jsonl
+uv run --frozen laya-bangla score out.jsonl --reference outputs/bench-v2/predictions.jsonl
+```
 
 ### 4. Rebuild the data, train, and benchmark
 
@@ -174,8 +221,9 @@ uv run --frozen laya-bangla benchmark --model models/laya-bangla-v2 --output out
 uv run --frozen laya-bangla compare outputs/bench-base/summary.json outputs/bench-v2/summary.json
 ```
 
-Each run needs a fresh output directory. [Fine-tuning and benchmarking](docs/fine-tuning.md)
-explains the training method and the benchmark rules.
+Each run needs a fresh output directory. The [fine-tuning guide](docs/fine-tuning.md) explains
+full fine-tuning, LoRA (`--config configs/train-lora.toml`), QLoRA for the LLM version
+(`laya-bangla train-llm`), and how to train on your own data.
 
 ### 5. Publish
 
@@ -184,13 +232,15 @@ With a Hugging Face token that can write to the target repositories in `HF_TOKEN
 ```bash
 uv run --frozen laya-bangla publish --model models/laya-bangla-v2 --repo algolyzer/laya-bangla \
   --benchmark base=outputs/bench-base --benchmark laya-bangla-v2=outputs/bench-v2 --tag v2
-uv run --frozen laya-bangla publish-space --repo algolyzer/laya-bangla-playground
+uv run --frozen laya-bangla publish-onnx --onnx models/laya-bangla-v2-onnx --repo algolyzer/laya-bangla
+uv run --frozen laya-bangla publish-space --space web --repo algolyzer/laya-bangla-playground
 ```
 
 `publish` uploads the checkpoint, [the model card](docs/model-card.md), `LICENSE`, `NOTICE`,
 and metrics-only benchmark summaries, then checks that the Hub copy matches the local files
-before tagging it. It refuses to move an existing tag. Hosting a Gradio Space requires a paid
-Hugging Face plan for the owner.
+before tagging it. It refuses to move an existing tag. `publish-onnx` adds the ONNX folders and
+verifies them the same way. `publish-space` reads the Space type from its README: `web/` is a
+free static Space; `space/` is a Gradio Space, which Hugging Face only hosts on a paid plan.
 
 ## Project status
 
@@ -200,7 +250,11 @@ Hugging Face plan for the owner.
 | Fine-tuning and probability calibration | [Available](docs/fine-tuning.md): `laya-bangla train` |
 | Benchmark against the upstream model | [Available](docs/benchmark-results.md): `laya-bangla benchmark` |
 | Fine-tuned model | **Published:** [`algolyzer/laya-bangla`](https://huggingface.co/algolyzer/laya-bangla) `v2` |
-| Live demo | Hugging Face Space source in [`space/`](space/); local playground with `laya-bangla serve` |
+| ONNX versions for browsers and Node.js | **Published** in the model repository, checked against PyTorch |
+| Live demo | **Live**, free, runs in the browser: [`algolyzer/laya-bangla-playground`](https://huggingface.co/spaces/algolyzer/laya-bangla-playground) |
+| English benchmark | Available: `configs/data-english.toml` |
+| LoRA version | **Published:** [`algolyzer/laya-bangla-lora`](https://huggingface.co/algolyzer/laya-bangla-lora) `v1` with ONNX; sample-tested, full test pending |
+| LLM version for Ollama, llama.cpp, vLLM | Code ready, not trained yet ([next steps](docs/next-steps.md)) |
 | Synthetic smoke set | 36 Bangla/Banglish/mixed messages for diagnostics ([results](docs/baseline-smoke-results.md)) |
 | Speaker review and customer-support data | Open; see the [roadmap](docs/roadmap.md) |
 

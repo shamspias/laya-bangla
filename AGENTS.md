@@ -10,10 +10,12 @@ for Bangla, and publish the resulting checkpoint on Hugging Face.
   diagnostic messages (`baseline`), builds real training/test data from pinned
   public datasets (`prepare`, see `docs/datasets.md`), fine-tunes and calibrates
   (`train`), benchmarks checkpoints on held-out data (`benchmark`, `compare`),
-  serves a comparison playground (`serve`), and uploads releases (`publish`,
-  `publish-space`). See `docs/fine-tuning.md`. v2 is published as
-  `algolyzer/laya-bangla` (tag `v2`); `docs/model-card.md` is its Hub README and
-  `space/` is its Gradio Space. Speaker review and target-workflow data are pending.
+  serves a comparison playground (`serve`), exports ONNX (`export-onnx`), scores other
+  runtimes (`score`), and uploads releases (`publish`, `publish-onnx`, `publish-space`).
+  See `docs/fine-tuning.md` and `docs/deploy.md`. v2 is published as
+  `algolyzer/laya-bangla` (tag `v2`); `docs/model-card.md` is its Hub README. The public
+  Space is the static browser app in `web/` (free hosting); `space/` is the Gradio app.
+  `docs/next-steps.md` records unfinished work (LoRA benchmark, LLM version).
 - Never train on the smoke set or on benchmark-only sources in `configs/data.toml`.
 - `configs/baseline.toml` pins `convaiinnovations/laya-multilingual` to revision
   `e4e9ddf21a7b1903b7acffd8814ad4307bf63a67`. The root checkpoint at

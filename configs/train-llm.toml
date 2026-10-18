@@ -1,0 +1,31 @@
+# laya-bangla-llm: QLoRA fine-tuning of a small chat LLM on the same prepared rows as
+# laya-bangla, so the typed decisions can run in Ollama, llama.cpp, and vLLM.
+# `laya-bangla train-llm --output models/laya-bangla-llm`; see docs/fine-tuning.md.
+base_model = "Qwen/Qwen3-1.7B"
+revision = "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+train = "../data/processed/train.jsonl"
+validation = "../data/processed/validation.jsonl"
+seed = 20261018
+
+# 4-bit NF4 base weights (QLoRA) with adapters on every attention and MLP projection.
+[lora]
+r = 16
+alpha = 32
+dropout = 0.05
+target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+[trainer]
+epochs = 1
+# Effective batch 32. Qwen3's 151k-token vocabulary makes logits the largest activation,
+# so micro-batches stay small: one row at a time fits beside other GPU jobs on 8 GB.
+micro_batch = 1
+grad_accum = 32
+lr = 2e-4
+weight_decay = 0.0
+warmup_ratio = 0.03
+# 10 of 38,766 training rows (0.03%) are longer and are skipped; train_report.json
+# records the count. The longest is 3,479 tokens, which would need far more memory.
+max_len = 1280
+# Validation loss is reported before and after training on this many validation rows.
+validation_rows = 500
+log_every = 20

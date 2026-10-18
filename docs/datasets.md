@@ -84,6 +84,32 @@ validation rows that leaked into a test split.
 Code-mixed text is under-represented in every public source above; the smoke
 set and the playground remain the main checks for it.
 
+## English benchmark
+
+Fine-tuning on Bangla can cost a model some of its English and general ability.
+[`configs/data-english.toml`](../configs/data-english.toml) builds English test sets for the
+same typed decisions, used only for benchmarking. They are written to
+`data/processed-english/`, so the Bangla splits above stay byte-identical.
+
+```bash
+uv run --frozen laya-bangla prepare --config configs/data-english.toml
+uv run --frozen laya-bangla benchmark --model base --data data/processed-english/test.jsonl --output outputs/bench-en-base
+```
+
+| Source | Text | Size | Typed decisions | License |
+| --- | --- | ---: | --- | --- |
+| [MASSIVE](https://huggingface.co/datasets/mteb/amazon_massive_intent) `en` | Voice-assistant requests, the English side of the Bangla test | 2,970 | scenario, intent | CC BY 4.0 |
+| [SIB-200](https://huggingface.co/datasets/mteb/sib200) `eng_Latn` | The English sentences behind the Bangla SIB-200 test | 204 | topic | CC BY-SA 4.0 |
+| [IndicSentiment](https://huggingface.co/datasets/mteb/IndicSentiment) English reviews | The English originals of the Bangla test reviews | 996 | sentiment | CC0 1.0 |
+| [XNLI](https://huggingface.co/datasets/facebook/xnli) `en` | The English test IndicXNLI was translated from (neutral pairs dropped) | 3,340 | entailment | CC BY-NC 4.0 |
+| [TweetEval](https://huggingface.co/datasets/cardiffnlp/tweet_eval) `hate` | English tweets (HatEval 2019) | 2,966 | hate | See TweetEval |
+| [TweetEval](https://huggingface.co/datasets/cardiffnlp/tweet_eval) `sentiment` | English tweets (SemEval 2017), stable 3,000-tweet sample | 3,000 | sentiment | See TweetEval |
+
+Four of these are parallel to Bangla tests (MASSIVE, SIB-200, IndicSentiment, and XNLI pairs
+are the same items in English), so the gap between the two languages is directly comparable.
+Every item is asked with the Bangla and the English test wording, as in the Bangla benchmark:
+13,476 items, 26,952 rows.
+
 ## Licensing notes
 
 The fine-tuned checkpoint is trained on CC BY 4.0, CC BY-SA 4.0, MIT, and

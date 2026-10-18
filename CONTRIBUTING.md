@@ -69,8 +69,9 @@ Small, shareable examples and test fixtures can be tracked under `examples/` or
 `tests/fixtures/` when needed. Put curated evaluation summaries in `docs/`.
 Publish release weights to Hugging Face with `laya-bangla publish`, which uploads
 `docs/model-card.md` as the model card, and link the exact revision from the
-README. The Space in `space/` mirrors `laya_bangla.app`; `tests/test_space.py`
-keeps their questions identical. Keep local credentials in ignored environment files.
+README. The browser Space in `web/` and the Gradio app in `space/` mirror
+`laya_bangla.app`; `tests/test_web.py` and `tests/test_space.py` keep their questions
+identical. `web/vendor/laya-ts/` is an unmodified upstream build; see its README to update it. Keep local credentials in ignored environment files.
 
 ## License
 

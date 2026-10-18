@@ -1,0 +1,60 @@
+{
+  "bn": {
+    "department": {
+      "type": "choice",
+      "instructions": "অনুরোধের মূল বিষয় অনুযায়ী কোন বিভাগ এটি দেখবে?",
+      "criteria": {
+        "billing": "বিল, টাকা কাটা, পেমেন্ট বা টাকা ফেরত",
+        "technical": "অ্যাপ, লগইন বা সেবার প্রযুক্তিগত ত্রুটি",
+        "sales": "নতুন প্যাকেজ, দাম বা চুক্তি কেনার তথ্য",
+        "other": "ডেলিভারি, সাধারণ তথ্য, মতামত বা অন্য বিষয়"
+      }
+    },
+    "churn_risk": {
+      "type": "noul",
+      "instructions": "ব্যবহারকারী কি স্পষ্টভাবে সেবা ছেড়ে যাওয়া বা অন্য সেবায় চলে যাওয়ার হুমকি দিচ্ছেন?",
+      "criteria": {
+        "false": "না, সেবা ছেড়ে যাওয়ার হুমকি নেই",
+        "true": "হ্যাঁ, শর্তসাপেক্ষে হলেও সেবা ছেড়ে যাওয়ার হুমকি আছে"
+      }
+    },
+    "urgency": {
+      "type": "score",
+      "instructions": "উল্লিখিত সময়সীমা ও কাজ আটকে থাকার ভিত্তিতে অনুরোধটি কতটা জরুরি?",
+      "criteria": [
+        "জরুরি নয়; সময়সীমা নেই বা পরে করলেও চলবে",
+        "শিগগির বা আগামীকালের মধ্যে চাই; এখন কাজ আটকে নেই",
+        "এখনই বা আজই দরকার; সময় প্রায় শেষ বা কাজ আটকে আছে"
+      ]
+    }
+  },
+  "en": {
+    "department": {
+      "type": "choice",
+      "instructions": "Which department should handle the main subject of this request?",
+      "criteria": {
+        "billing": "Bills, charges, payments, or refunds",
+        "technical": "Technical problems with the app, login, or service",
+        "sales": "Information about buying new plans, pricing, or contracts",
+        "other": "Delivery, general information, feedback, or anything else"
+      }
+    },
+    "churn_risk": {
+      "type": "noul",
+      "instructions": "Does the user explicitly threaten to stop using the service or switch to another provider?",
+      "criteria": {
+        "false": "No, there is no threat to leave the service",
+        "true": "Yes, there is a threat to leave the service, even if conditional"
+      }
+    },
+    "urgency": {
+      "type": "score",
+      "instructions": "How urgent is the request based on the stated deadline and whether work is blocked?",
+      "criteria": [
+        "Not urgent; no deadline or it can wait",
+        "Needed soon or by tomorrow; work is not currently blocked",
+        "Needed now or today; imminent deadline or work is blocked"
+      ]
+    }
+  }
+}

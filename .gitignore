@@ -63,6 +63,7 @@ torch_cache/
 /data/raw/
 /data/interim/
 /data/processed/
+/data/processed-english/
 /data/cache/
 /data/splits/
 /datasets/

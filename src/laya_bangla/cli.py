@@ -321,6 +321,9 @@ def main() -> None:
     command.add_argument("--config", type=Path, default=Path("configs/train.toml"))
     command.add_argument("--output", type=Path, required=True)
     command.add_argument("--device", choices=("auto", "cpu", "mps", "cuda"), default="auto")
+    command = commands.add_parser("train-llm", help="QLoRA fine-tune the LLM variant")
+    command.add_argument("--config", type=Path, default=Path("configs/train-llm.toml"))
+    command.add_argument("--output", type=Path, required=True)
     command = commands.add_parser("benchmark", help="Score a checkpoint on held-out test sets")
     command.add_argument("--model", required=True, help="'base' or a checkpoint directory")
     command.add_argument("--output", type=Path, required=True)
@@ -330,6 +333,16 @@ def main() -> None:
     command.add_argument("--device", choices=("auto", "cpu", "mps", "cuda"), default="auto")
     command.add_argument("--batch-size", type=positive_int, default=64)
     command.add_argument("--limit", type=positive_int, help="Rows per source and wording")
+    command = commands.add_parser("score", help="Score predictions from another runtime")
+    command.add_argument("predictions", type=Path, help='JSONL lines of {"id", "answers"}')
+    command.add_argument("--data", type=Path, default=Path("data/processed/test.jsonl"))
+    command.add_argument(
+        "--reference", type=Path, help="A PyTorch benchmark's predictions.jsonl to compare with"
+    )
+    command.add_argument("--output", type=Path, help="Write the report as JSON")
+    command = commands.add_parser("export-onnx", help="Export a checkpoint for laya-ts")
+    command.add_argument("--model", type=Path, required=True)
+    command.add_argument("--output", type=Path, required=True, help="Writes fp32/ and int8/")
     command = commands.add_parser("compare", help="Markdown table of two benchmark summaries")
     command.add_argument("base", type=Path)
     command.add_argument("tuned", type=Path)
@@ -355,6 +368,10 @@ def main() -> None:
     )
     command.add_argument("--tag", help="Tag the uploaded commit, e.g. v2")
     command.add_argument("--message", default="Upload laya-bangla checkpoint")
+    command = commands.add_parser("publish-onnx", help="Add ONNX variants to a model repo")
+    command.add_argument("--onnx", type=Path, required=True, help="Folder with fp32/ and int8/")
+    command.add_argument("--repo", required=True, help="Hub model repository, e.g. org/name")
+    command.add_argument("--message", default="Add ONNX variants for laya-ts (Node and browser)")
     command = commands.add_parser("publish-space", help="Upload the playground Space")
     command.add_argument("--space", type=Path, default=Path("space"))
     command.add_argument("--repo", required=True, help="Hub Space repository, e.g. org/name")
@@ -375,6 +392,12 @@ def main() -> None:
         report = finetune(args.config, args.output, args.device)
         print(f"Saved checkpoint to {args.output} (epoch {report['selected_epoch']})")
         return
+    if args.command == "train-llm":
+        from .llm import train_llm
+
+        report = train_llm(args.config, args.output)
+        print(f"Saved laya-bangla-llm to {args.output} ({report['optimizer_steps']} steps)")
+        return
     if args.command == "benchmark":
         from .benchmark import run
 
@@ -388,6 +411,24 @@ def main() -> None:
             args.batch_size,
             args.limit,
         )
+        return
+    if args.command == "score":
+        from .benchmark import score_predictions
+        from .prepare import read_rows
+
+        answers = {row["id"]: row["answers"] for row in read_rows(args.predictions)}
+        reference = read_rows(args.reference) if args.reference else None
+        report = score_predictions(read_rows(args.data), answers, reference)
+        if args.output:
+            write_json(args.output, report)
+        print(json.dumps({k: v for k, v in report.items() if k != "tasks"}, indent=2))
+        return
+    if args.command == "export-onnx":
+        from .export import export_onnx, quantize_int8
+
+        report = export_onnx(args.model, args.output / "fp32")
+        sizes = quantize_int8(args.output / "fp32", args.output / "int8")
+        print(json.dumps({"verification": report, "int8_bytes": sizes}, indent=2))
         return
     if args.command == "compare":
         from .benchmark import compare_report
@@ -423,6 +464,12 @@ def main() -> None:
             args.message,
         )
         print(f"Published https://huggingface.co/{args.repo} at {commit}")
+        return
+    if args.command == "publish-onnx":
+        from .publish import publish_onnx
+
+        commit = publish_onnx(args.onnx, args.repo, args.message)
+        print(f"Published ONNX to https://huggingface.co/{args.repo} at {commit}")
         return
     if args.command == "publish-space":
         from .publish import publish_space

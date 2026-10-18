@@ -19,10 +19,23 @@ def checkpoint_path(model: str, baseline_config: Path) -> tuple[str, dict]:
         config, _schemas, _examples = load_inputs(baseline_config)
         snapshot = download_checkpoint(config)
         return str(snapshot), {"model_id": config["model_id"], "revision": config["revision"]}
+    from .llm import is_llm_checkpoint
+
     path = Path(model)
-    if not (path / "rl_agent_config.json").is_file():
-        raise FileNotFoundError(f"{path} is not a Laya checkpoint directory")
+    if not (path / "rl_agent_config.json").is_file() and not is_llm_checkpoint(path):
+        raise FileNotFoundError(f"{path} is not a Laya or laya-bangla-llm checkpoint directory")
     return str(path), {"path": str(path.resolve())}
+
+
+def load_agent(path: str, device: str):
+    """A Laya agent, or the LLM variant behind the same predict/predict_batch interface."""
+    from .llm import LlmAgent, is_llm_checkpoint
+
+    if is_llm_checkpoint(Path(path)):
+        return LlmAgent(path, device=device)
+    import laya
+
+    return laya.load(path, device=device)
 
 
 def predict_rows(agent, rows: list[dict], batch_size: int) -> list[dict]:
@@ -120,8 +133,6 @@ def run(
     limit: int | None = None,
     bins: int = 10,
 ) -> dict:
-    import laya
-
     from .cli import choose_device, hardware, write_json
 
     output.mkdir(parents=True, exist_ok=False)
@@ -143,7 +154,7 @@ def run(
     }
     print(f"Benchmarking {model} on {len(rows)} rows ({device})...", flush=True)
     start = time.perf_counter()
-    with laya.load(path, device=device) as agent:
+    with load_agent(path, device) as agent:
         answers = predict_rows(agent, rows, batch_size)
         records = []
         with (output / "predictions.jsonl").open("x", encoding="utf-8") as stream:
@@ -163,6 +174,8 @@ def run(
         routing = end_to_end_intents(agent, rows, answers, tasks, batch_size)
         smoke = smoke_records(agent, baseline_config, batch_size)
     metadata["seconds"] = round(time.perf_counter() - start, 1)
+    if hasattr(agent, "invalid"):  # LLM replies that did not name a valid option
+        metadata["invalid_answers"] = {"count": agent.invalid, "of": agent.questions_answered}
     metadata["decisions"] = len(records) + len(routing) + len(smoke)
     summary = {
         "tasks": summarize_records(records, bins),
@@ -180,6 +193,48 @@ def run(
     write_json(output / "metadata.json", metadata)
     print(f"Saved {metadata['decisions']} decisions in {metadata['seconds']} s to {output}")
     return summary
+
+
+def score_predictions(
+    rows: list[dict], answers: dict, reference: list[dict] | None = None, bins: int = 10
+) -> dict:
+    """Score answers produced by another runtime (ONNX, laya-ts) on benchmark rows.
+
+    `answers` maps a row id to its answers object. With `reference`, the predictions of a
+    PyTorch benchmark run, the report also gives how often the two agree on the label and
+    the largest gap in the probability of that label.
+    """
+    records = []
+    for row in rows:
+        if row["id"] not in answers:
+            continue
+        for qid, question in row["questions"].items():
+            answer = answers[row["id"]][qid]
+            record = decision_record(answer, question, row["expected"][qid])
+            record.update(
+                id=row["id"],
+                source=row["source"],
+                task=qid,
+                lang=row["instruction_language"],
+                slice=row["slice"],
+            )
+            records.append(record)
+    if not records:
+        raise ValueError("No prediction matches a benchmark row id")
+    report = {"decisions": len(records), "tasks": summarize_records(records, bins)}
+    if reference is not None:
+        ref = {(r["id"], r["task"]): r for r in reference}
+        pairs = [(r, ref[(r["id"], r["task"])]) for r in records if (r["id"], r["task"]) in ref]
+        if not pairs:
+            raise ValueError("No prediction matches a reference decision")
+        report["reference"] = {
+            "decisions": len(pairs),
+            "label_agreement": sum(a["predicted"] == b["predicted"] for a, b in pairs) / len(pairs),
+            "accuracy": sum(b["correct"] for _a, b in pairs) / len(pairs),
+            "max_confidence_gap": max(abs(a["confidence"] - b["confidence"]) for a, b in pairs),
+        }
+    report["accuracy"] = sum(r["correct"] for r in records) / len(records)
+    return report
 
 
 def first_per_group(rows: list[dict], limit: int) -> list[dict]:

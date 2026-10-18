@@ -183,5 +183,5 @@ def test_run_writes_predictions_summary_and_metadata(tmp_path, monkeypatch, task
 
 
 def test_checkpoint_path_rejects_directories_without_a_laya_config(tmp_path):
-    with pytest.raises(FileNotFoundError, match="not a Laya checkpoint"):
+    with pytest.raises(FileNotFoundError, match="not a Laya or laya-bangla-llm checkpoint"):
         b.checkpoint_path(str(tmp_path), ROOT / "configs/baseline.toml")

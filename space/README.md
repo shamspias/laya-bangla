@@ -33,4 +33,8 @@ probabilities next to the base model's.
 - **How to use** and **Data & limits:** the Python API, question types, datasets, and known
   weaknesses.
 
+This Gradio version runs the model on a server, which Hugging Face only hosts on a paid plan.
+The public demo is the free browser version in `web/`. To run this one locally:
+`cd space && pip install gradio==6.17.3 -r requirements.txt && python app.py`.
+
 Source: [github.com/shamspias/laya-bangla](https://github.com/shamspias/laya-bangla) (`space/`).

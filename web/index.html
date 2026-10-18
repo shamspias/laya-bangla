@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>laya-bangla browser playground</title>
+<meta name="description" content="Try laya-bangla, a Bangla and Banglish typed-decision model, fully in your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23067a5b'/%3E%3Ctext x='16' y='23' font-size='18' text-anchor='middle' fill='white' font-family='sans-serif'%3Eল%3C/text%3E%3C/svg%3E">
+<script type="importmap">
+{ "imports": { "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.bundle.min.mjs" } }
+</script>
+<style>
+  :root {
+    --bg: #f6f7f5; --card: #ffffff; --ink: #18211d; --muted: #5d6b64; --line: #dfe5e1;
+    --accent: #067a5b; --accent-soft: #e2f3ec; --accent-ink: #ffffff; --warn: #9a5b00;
+    --warn-soft: #fff4e0; --err: #b42318; --bar: #e8ece9; --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101513; --card: #171e1b; --ink: #e6ece9; --muted: #9aa9a2; --line: #2a3530;
+      --accent: #3fbf93; --accent-soft: #173a2e; --accent-ink: #08130e; --warn: #f0b45a;
+      --warn-soft: #3a2a10; --err: #ff8a7f; --bar: #24302b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Bengali", "Hind Siliguri", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 24px 0 8px; }
+  h3 { font-size: 1rem; margin: 18px 0 6px; }
+  a { color: var(--accent); }
+  p { margin: 6px 0; }
+  .lead { color: var(--muted); margin: 0 0 6px; max-width: 760px; }
+  .links { font-size: .9rem; margin: 6px 0 16px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 16px 0; overflow-x: auto; }
+  .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted);
+    padding: 8px 12px; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .panel[hidden] { display: none; }
+  .grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  label, .label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
+  textarea, select { width: 100%; font: inherit; color: var(--ink); background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  textarea { min-height: 84px; resize: vertical; }
+  textarea.code { font: 13px/1.45 ui-monospace, Consolas, monospace; min-height: 220px; }
+  textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--card); color: var(--ink); padding: 6px 12px; font: inherit; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .check { display: inline-flex; gap: 6px; align-items: center; font-size: .9rem; margin: 10px 0 0; }
+  .btn { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.ghost { background: var(--accent-soft); color: var(--ink); }
+  .status { font-size: .9rem; color: var(--muted); margin-top: 8px; }
+  .status.err { color: var(--err); }
+  .notice { background: var(--warn-soft); color: var(--ink); border-radius: 8px; padding: 8px 10px; font-size: .88rem; margin-top: 8px; }
+  .progress { height: 6px; background: var(--bar); border-radius: 999px; overflow: hidden; margin-top: 8px; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .progress.busy > div { width: 30%; animation: slide 1.2s ease-in-out infinite; }
+  @keyframes slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .progress.busy > div { animation: none; width: 100%; opacity: .5; } }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px;
+    padding: 4px 10px; font: inherit; font-size: .85rem; cursor: pointer; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip:hover { border-color: var(--accent); }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; font-size: .9rem; color: var(--muted); font-weight: 600; }
+  .q { border-top: 1px solid var(--line); padding: 10px 0; }
+  .q:first-child { border-top: 0; padding-top: 0; }
+  .qname { font-size: .8rem; color: var(--muted); }
+  .instr { font-size: .9rem; margin: 2px 0 4px; }
+  .answer { font-weight: 700; margin-bottom: 6px; }
+  .opt { display: grid; grid-template-columns: minmax(0, 1fr) 90px 52px; gap: 8px; align-items: center; font-size: .85rem; }
+  .opt span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar { height: 8px; background: var(--bar); border-radius: 4px; }
+  .bar i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+  .pct { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meta { font-size: .85rem; color: var(--muted); margin-bottom: 8px; }
+  .empty { color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; margin: 6px 0 12px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td b { color: var(--accent); }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+    overflow-x: auto; font: 13px/1.45 ui-monospace, Consolas, monospace; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: .9em; }
+  footer { margin-top: 32px; font-size: .85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>laya-bangla · বাংলা সিদ্ধান্ত মডেল</h1>
+  <p class="lead">Write a message in <b>Bangla, Banglish (Bangla in English letters), or a mix</b>.
+    The model answers fixed questions about it (which team should handle it, is it hate speech,
+    how serious is it) and shows how sure it is about every option.</p>
+  <p class="lead"><b>Everything runs in your browser.</b> Your text never leaves this page.
+    The first visit downloads the model once (about 640 MB); after that it loads from your browser's cache.</p>
+  <p class="links"><a href="https://huggingface.co/algolyzer/laya-bangla">Model card</a> ·
+    <a href="https://github.com/shamspias/laya-bangla">Source code</a> ·
+    <a href="https://huggingface.co/convaiinnovations/laya-multilingual">Base model</a></p>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="try">Try it · চেষ্টা করুন</button>
+    <button role="tab" aria-selected="false" data-tab="bench">Benchmark results</button>
+    <button role="tab" aria-selected="false" data-tab="use">How to use</button>
+    <button role="tab" aria-selected="false" data-tab="data">Data &amp; limits</button>
+  </nav>
+
+  <section class="panel" id="panel-try">
+    <div class="card" id="loader">
+      <div class="row">
+        <div style="flex: 1 1 260px">
+          <label for="variant">Model</label>
+          <select id="variant"></select>
+        </div>
+        <button class="btn" id="load">Load model</button>
+      </div>
+      <div class="progress" id="progress" hidden><div></div></div>
+      <p class="status" id="load-status">Loading takes a minute on the first visit. Chrome or Edge use your GPU (WebGPU); other browsers use the CPU.</p>
+    </div>
+
+    <div class="grid" style="margin-top: 16px">
+      <div class="card">
+        <label for="text">Your text (Bangla, Banglish, or mixed)</label>
+        <textarea id="text" maxlength="2000" placeholder="যেমন: বিলে দুইবার টাকা কেটেছে, আজই ফেরত চাই"></textarea>
+        <label for="preset">What should the model decide?</label>
+        <select id="preset"></select>
+        <span class="label">Language of the questions</span>
+        <div class="seg" role="group" aria-label="Language of the questions">
+          <button type="button" data-lang="bn" aria-pressed="true">বাংলা</button>
+          <button type="button" data-lang="en" aria-pressed="false">English</button>
+        </div>
+        <div><label class="check"><input type="checkbox" id="live" checked> Answer as I type</label></div>
+        <div style="margin-top: 10px"><button class="btn" id="run" disabled>Get decisions</button></div>
+        <details id="qbox">
+          <summary>Questions sent to the model (editable JSON)</summary>
+          <textarea class="code" id="questions" spellcheck="false"></textarea>
+        </details>
+        <span class="label">Try an example</span>
+        <div class="chips" id="examples"></div>
+      </div>
+      <div class="card" aria-live="polite">
+        <div class="meta" id="run-meta">Load the model, then type or pick a message.</div>
+        <div id="results"><p class="empty">Answers appear here.</p></div>
+      </div>
+    </div>
+    <p class="status">The built-in questions use the benchmark's test wording, which the model never saw in
+      training. <i>Customer support</i> questions come from a small synthetic diagnostic set, where the model is weaker.</p>
+  </section>
+
+  <section class="panel" id="panel-bench" hidden>
+    <h2>How well does it work?</h2>
+    <p>Every number is measured on <b>test data the model never saw</b>, asked with <b>question wording it
+      never saw</b> in training. Each question was asked twice, worded in Bangla and in English, so each cell
+      shows <b>accuracy with the Bangla question / with the English question</b>. The better model on each row is in bold.</p>
+    <div id="bench"><p class="empty">Loading results…</p></div>
+    <p>Full tables with macro-F1, calibration, and results by script are in the
+      <a href="https://github.com/shamspias/laya-bangla/blob/main/docs/benchmark-results.md">benchmark report</a>.</p>
+  </section>
+
+  <section class="panel" id="panel-use" hidden>
+    <h2>Use the model</h2>
+    <h3>Python</h3>
+    <pre><code>pip install "laya==0.4.11"
+
+import laya
+agent = laya.load("algolyzer/laya-bangla", revision="v2")
+questions = {
+    "sector": {
+        "type": "choice",
+        "instructions": "নাগরিকের এই সমস্যাটি কোন সেবা খাতের?",
+        "criteria": {"water": "পানি সরবরাহ", "electricity": "বিদ্যুৎ", "waste": "ময়লা ও পরিচ্ছন্নতা"},
+    },
+}
+print(agent.predict("আমাদের এলাকায় তিন দিন ধরে পানি নেই", questions)["answers"])</code></pre>
+    <h3>JavaScript (browser or Node)</h3>
+    <p>This page uses <a href="https://github.com/NandhaKishorM/laya/tree/main/laya-ts">laya-ts</a>, Laya's
+      TypeScript runtime, with the ONNX files in the model repository:</p>
+    <pre><code>import { Agent } from "./vendor/laya-ts/index.js";
+const agent = await Agent.load("algolyzer/laya-bangla", { subfolder: "onnx/int8", revision: "7c8ad162a66c05409f9278e047e3ee80c24017a8" });
+const result = await agent.predict("আমাদের এলাকায় তিন দিন ধরে পানি নেই", questions);</code></pre>
+    <h3>The three question types</h3>
+    <div class="table-wrap"><table>
+      <tr><th>Type</th><th>The model returns</th><th>Example</th></tr>
+      <tr><td><code>choice</code></td><td>the best option, plus a probability for every option</td><td>Which department should handle this?</td></tr>
+      <tr><td><code>noul</code></td><td>the probability that the answer is <b>yes</b></td><td>Is this comment hate speech?</td></tr>
+      <tr><td><code>score</code></td><td>a level on an ordered scale, with a probability per level</td><td>How urgent is it: low, medium, high?</td></tr>
+    </table></div>
+    <p>Write instructions and options in Bangla or English. <code>noul</code> questions use exactly the options
+      <code>"false"</code> and <code>"true"</code>; <code>score</code> options are a list from lowest to highest.</p>
+  </section>
+
+  <section class="panel" id="panel-data" hidden>
+    <h2>Datasets used for training</h2>
+    <p>All training data is real, published Bangla text. Nothing is machine-generated.</p>
+    <div class="table-wrap"><table>
+      <tr><th>Dataset</th><th>Text</th><th>What the model learned</th><th>License</th></tr>
+      <tr><td><a href="https://huggingface.co/datasets/mteb/amazon_massive_intent">MASSIVE</a> bn-BD</td><td>Voice-assistant requests</td><td>Scenario (18) and intent</td><td>CC BY 4.0</td></tr>
+      <tr><td><a href="https://huggingface.co/datasets/mteb/sib200">SIB-200</a> ben_Beng</td><td>News-style sentences</td><td>Topic (7)</td><td>CC BY-SA 4.0</td></tr>
+      <tr><td><a href="https://data.mendeley.com/datasets/kcr8zfmtvb">BanglaPSG</a></td><td>Citizen complaints</td><td>Service sector (6), severity (3)</td><td>CC BY 4.0</td></tr>
+      <tr><td><a href="https://huggingface.co/datasets/aplycaebous/BanTH">BanTH</a></td><td>YouTube comments in Banglish</td><td>Hate, personal attack, abusive</td><td>MIT</td></tr>
+      <tr><td><a href="https://huggingface.co/datasets/aplycaebous/BanHate">BanHate</a></td><td>YouTube comments in Bangla</td><td>Hate</td><td>MIT</td></tr>
+      <tr><td><a href="https://huggingface.co/datasets/TanjimKIT/Bangla_Sentiments_in_eLearning">Bangla Sentiments in eLearning</a></td><td>Course comments, Bangla and romanized</td><td>Sentiment (3)</td><td>Apache-2.0</td></tr>
+    </table></div>
+    <p>Test-only datasets: <a href="https://huggingface.co/datasets/khondoker/SentNoB">SentNoB</a>,
+      <a href="https://huggingface.co/datasets/mteb/IndicSentiment">IndicSentiment</a>,
+      <a href="https://huggingface.co/datasets/mteb/IndicXnliPairClassification">IndicXNLI</a>, and English sets listed in the
+      <a href="https://github.com/shamspias/laya-bangla/blob/main/docs/datasets.md">dataset guide</a>.</p>
+    <h2>Known limits</h2>
+    <ul>
+      <li><b>New kinds of yes/no questions can get worse.</b> All trained yes/no tasks are about moderation, so the model says "no" readily. Test new yes/no questions first.</li>
+      <li><b>Rare cases are missed.</b> Only about 8% of BanTH comments are abusive; the model finds few of them.</li>
+      <li><b>Complaint severity is weak</b> (about 40–43% over three levels).</li>
+      <li><b>Voice-assistant routing was trained on Bangla script only.</b> Banglish commands are often misrouted.</li>
+      <li><b>No real customer-support data</b> was available; the support preset is a diagnostic.</li>
+    </ul>
+  </section>
+
+  <footer>Runs on <a href="https://github.com/NandhaKishorM/laya">Laya</a> by Convai Innovations (Apache 2.0)
+    with ONNX Runtime Web. laya-bangla is an independent project.</footer>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+# English test sets for the same typed decisions, used only for benchmarking.
+# They measure how much general and English ability each checkpoint keeps after
+# fine-tuning on Bangla. They live in their own output folder so the Bangla training
+# splits in data/processed stay byte-identical. See docs/datasets.md.
+#
+#   uv run --frozen laya-bangla prepare --config configs/data-english.toml
+#   uv run --frozen laya-bangla benchmark --model base --data data/processed-english/test.jsonl ...
+tasks = "tasks.json"
+output = "../data/processed-english"
+cache = "../data/cache"
+seed = 20261018
+hash_split = { train = 0.8, validation = 0.1, test = 0.1 }
+max_train_rows_per_task = 0
+max_validation_rows_per_task = 0
+
+# The English side of MASSIVE: the same scenarios and intents as the Bangla bn-BD test.
+[sources.massive_en]
+loader = "massive"
+repo = "mteb/amazon_massive_intent"
+revision = "940fd47a81eaa7f2cc7b129674d945d618ac38c2"
+files = { test = "test/en.json.gz" }
+license = "CC-BY-4.0"
+use = "benchmark"
+slice = "english"
+tasks = ["massive_scenario", "massive_intent"]
+
+# The English FLORES sentences behind the Bangla SIB-200 test.
+[sources.sib200_en]
+loader = "sib200"
+repo = "mteb/sib200"
+revision = "83d0320451aff3cf268beb963bf6b5f2f0bcbc3a"
+files = { test = "test/eng_Latn.parquet" }
+license = "CC-BY-SA-4.0"
+use = "benchmark"
+slice = "english"
+tasks = ["sib_topic"]
+
+# The English originals of the IndicSentiment Bangla test reviews.
+[sources.indicsentiment_en]
+repo = "mteb/IndicSentiment"
+revision = "3032ed80f03ebe10025ee43643bb54d77ae7a901"
+files = { test = "test/bn.jsonl.gz" }
+license = "CC0-1.0"
+use = "benchmark"
+slice = "english"
+tasks = ["sentiment"]
+
+# The English XNLI test that IndicXNLI was translated from (neutral pairs dropped).
+[sources.xnli_en]
+repo = "facebook/xnli"
+revision = "b8dd5d7af51114dbda02c0e3f6133f332186418e"
+files = { test = "en/test-00000-of-00001.parquet" }
+license = "CC-BY-NC-4.0"
+use = "benchmark"
+slice = "english"
+tasks = ["entailment"]
+
+# English tweets: HatEval 2019 hate speech and SemEval 2017 sentiment, via TweetEval.
+[sources.tweeteval_hate]
+repo = "cardiffnlp/tweet_eval"
+revision = "b3a375baf0f409c77e6bc7aa35102b7b3534f8be"
+files = { test = "hate/test-00000-of-00001.parquet" }
+license = "see TweetEval and SemEval 2019 Task 5 terms"
+use = "benchmark"
+slice = "english"
+tasks = ["hate"]
+
+[sources.tweeteval_sentiment]
+repo = "cardiffnlp/tweet_eval"
+revision = "b3a375baf0f409c77e6bc7aa35102b7b3534f8be"
+files = { test = "sentiment/test-00000-of-00001.parquet" }
+license = "see TweetEval and SemEval 2017 Task 4 terms"
+use = "benchmark"
+slice = "english"
+# A stable 3,000-tweet sample of the 12,284-tweet test keeps benchmark runs short.
+max_test_rows = 3000
+tasks = ["sentiment"]

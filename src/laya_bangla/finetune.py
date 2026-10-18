@@ -37,6 +37,26 @@ def validation_metrics(records) -> dict:
     return {"accuracy": correct / len(records), "nll": nll / len(records)}
 
 
+def add_lora(encoder, settings: dict):
+    """Freeze the encoder and train low-rank adapters on its attention and MLP projections.
+
+    The decision head stays fully trainable; `laya.train` puts the adapter parameters in
+    the encoder learning-rate group because their names start with `encoder.`.
+    """
+    from peft import LoraConfig, get_peft_model
+
+    for parameter in encoder.parameters():
+        parameter.requires_grad_(False)
+    lora = LoraConfig(
+        r=settings["r"],
+        lora_alpha=settings["alpha"],
+        lora_dropout=settings["dropout"],
+        target_modules=list(settings["target_modules"]),
+        bias="none",
+    )
+    return get_peft_model(encoder, lora)
+
+
 def finetune(config_path: Path, output: Path, device: str = "auto") -> dict:
     import torch
     from laya.calibrate import fit_abstention_thresholds, fit_temperature_map
@@ -81,6 +101,8 @@ def finetune(config_path: Path, output: Path, device: str = "auto") -> dict:
         print(f"{split}: {len(items[split])} items, skipped {skipped}", flush=True)
     if config.get("freeze_embeddings"):
         model.encoder.get_input_embeddings().weight.requires_grad_(False)
+    if config.get("lora"):
+        model.encoder = add_lora(model.encoder, config["lora"])
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"trainable parameters: {trainable:,}", flush=True)
     model.to(dev)
@@ -111,6 +133,9 @@ def finetune(config_path: Path, output: Path, device: str = "auto") -> dict:
     )
     train_seconds = time.perf_counter() - start
     model.load_state_dict(best.pop("state"))
+    if config.get("lora"):
+        # Fold the adapter into the encoder weights: the result is a plain Laya checkpoint.
+        model.encoder = model.encoder.merge_and_unload()
     model.to(dev).eval()
 
     # Temperatures and abstention thresholds come from validation, never from test data.
@@ -135,6 +160,7 @@ def finetune(config_path: Path, output: Path, device: str = "auto") -> dict:
         train_seconds=round(train_seconds, 1),
         trainable_parameters=trainable,
         freeze_embeddings=bool(config.get("freeze_embeddings")),
+        lora=config.get("lora"),
         trainer=asdict(trainer),
         validation_history=history,
         selected_epoch=best["epoch"],

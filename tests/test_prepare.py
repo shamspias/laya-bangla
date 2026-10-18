@@ -210,8 +210,9 @@ def test_build_rows_skips_intent_for_single_intent_scenarios(tasks):
     assert list(rows[0]["questions"]) == ["massive_scenario"]
 
 
-def test_data_config_sources_have_loaders_tasks_and_pins(tasks):
-    config = p.load_config(ROOT / "configs/data.toml")
+@pytest.mark.parametrize("name", ["data.toml", "data-english.toml"])
+def test_data_config_sources_have_loaders_tasks_and_pins(tasks, name):
+    config = p.load_config(ROOT / "configs" / name)
     for name, source in config["sources"].items():
         assert set(source["tasks"]) <= set(tasks), name
         assert source["use"] in ("train", "benchmark"), name
@@ -269,3 +270,66 @@ tasks = ["massive_scenario", "massive_intent"]
     assert manifest["cleaning"]["train_leak_removed"] == 2
     assert manifest["sources"]["massive"]["license"] == "CC-BY-4.0"
     assert manifest["splits"]["test"]["sha256"] == p.sha256_file(tmp_path / "out/test.jsonl")
+
+
+def test_english_benchmark_is_test_only_and_marked_english():
+    config = p.load_config(ROOT / "configs/data-english.toml")
+    assert config["output"] != p.load_config(ROOT / "configs/data.toml")["output"]
+    for name, source in config["sources"].items():
+        assert source["use"] == "benchmark" and source["slice"] == "english", name
+
+
+def test_shared_loader_renames_source_and_caps_test_rows(tmp_path, monkeypatch, tasks):
+    massive = tmp_path / "en.json"
+    massive.write_text(
+        "\n".join(
+            json.dumps({"id": i, "label": "alarm_set", "text": f"wake me at {i}"}) for i in range(5)
+        ),
+        encoding="utf-8",
+    )
+    config = tmp_path / "data.toml"
+    config.write_text(
+        f"""
+tasks = "{(ROOT / "configs/tasks.json").as_posix()}"
+output = "out"
+cache = "cache"
+seed = 1
+hash_split = {{ train = 0.8, validation = 0.1, test = 0.1 }}
+max_train_rows_per_task = 0
+max_validation_rows_per_task = 0
+[sources.massive_en]
+loader = "massive"
+repo = "example/massive"
+revision = "{"a" * 40}"
+files = {{ test = "test/en.json" }}
+license = "CC-BY-4.0"
+use = "benchmark"
+slice = "english"
+max_test_rows = 3
+tasks = ["massive_scenario", "massive_intent"]
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(p, "fetch", lambda source, filename, cache: massive)
+    manifest = p.prepare(config)
+    test = p.read_rows(tmp_path / "out/test.jsonl")
+    assert len(test) == 6  # 3 capped states, each asked with Bangla and English wording
+    assert {row["source"] for row in test} == {"massive_en"}
+    assert {row["slice"] for row in test} == {"english"}
+    assert all(row["id"].startswith("massive_en-") for row in test)
+    assert all(row["group"].startswith("massive_en:") for row in test)
+    assert manifest["cleaning"]["capped_test"] == 2
+    assert manifest["sources"]["massive_en"]["loader"] == "massive"
+
+
+def test_xnli_en_drops_neutral_pairs(tmp_path):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = tmp_path / "xnli.parquet"
+    rows = {"premise": ["A", "B", "C"], "hypothesis": ["a", "b", "c"], "label": [0, 1, 2]}
+    pq.write_table(pa.table(rows), path)
+    records = list(p.load_xnli_en({"test": path}, 1, {}))
+    assert [r["labels"]["entailment"] for r in records] == [True, False]
+    # Like IndicXNLI, the pair is one line after whitespace normalization.
+    assert records[0]["state"] == "Sentence 1: A Sentence 2: a"

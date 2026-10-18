@@ -17,10 +17,13 @@ dependencies = [
   "huggingface-hub==0.36.0",
   "numpy==2.5.3",
   "pyarrow==25.0.1",
+  "peft==0.21.2",
 ]
 
 [project.optional-dependencies]
 app = ["fastapi==0.143.1", "uvicorn==0.54.0"]
+export = ["onnx==1.23.1", "onnxruntime==1.30.0", "onnxscript==0.7.2"]
+llm = ["bitsandbytes==0.50.2"]
 
 [project.scripts]
 laya-bangla = "laya_bangla.cli:main"
